@@ -8,7 +8,6 @@ import TransactionsScreen from '../screens/free/TransactionsScreen';
 import AddBudgetScreen from '../screens/free/AddBudgetScreen';
 import CalendarScreen from '../screens/premium/CalendarScreen';
 import SwipeScreen from '../screens/premium/SwipeScreen';
-import CustomizeScreen from '../screens/premium/CustomizeScreen';
 import BankConnectionScreen from '../screens/BankConnectionScreen';
 import ProfileScreen from '../screens/free/ProfileScreen';
 import { useTheme } from '../store/ThemeContext';
@@ -31,13 +30,6 @@ function LiteBadge() {
   );
 }
 
-function UltraBadge() {
-  return (
-    <View style={[styles.badge, { backgroundColor: '#7C3AED' }]}>
-      <Text style={styles.badgeText}>ULTRA</Text>
-    </View>
-  );
-}
 
 export default function TabNavigator() {
   const { primaryColor } = useTheme();
@@ -109,18 +101,6 @@ export default function TabNavigator() {
             <View>
               <Ionicons name="link-outline" size={size} color={color} />
               <LiteBadge />
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Customize"
-        component={CustomizeScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <View>
-              <Ionicons name="color-palette-outline" size={size} color={color} />
-              <UltraBadge />
             </View>
           ),
         }}

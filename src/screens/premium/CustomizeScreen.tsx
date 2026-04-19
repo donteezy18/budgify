@@ -32,7 +32,7 @@ function ColorSwatch({
   );
 }
 
-function CustomizeContent() {
+function CustomizeContent({ hideHeader }: { hideHeader?: boolean }) {
   const { primaryColor, setPrimaryColor, categoryColors, setCategoryColor, resetCategoryColors } = useTheme();
   const [activeCatPicker, setActiveCatPicker] = useState<string | null>(null);
 
@@ -50,10 +50,12 @@ function CustomizeContent() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { backgroundColor: primaryColor }]}>
-        <Text style={styles.headerTitle}>Customize</Text>
-        <Text style={styles.headerSub}>Make Budgify yours</Text>
-      </View>
+      {!hideHeader && (
+        <View style={[styles.header, { backgroundColor: primaryColor }]}>
+          <Text style={styles.headerTitle}>Customize</Text>
+          <Text style={styles.headerSub}>Make Budgify yours</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
