@@ -1,21 +1,138 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert,
+  TouchableOpacity, Alert, Dimensions,
 } from 'react-native';
-import { Calendar } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import PremiumGate from '../../components/PremiumGate';
 import DueItemModal from '../../components/DueItemModal';
 import { useCalendar, DueItem, CATEGORY_COLORS } from '../../store/CalendarContext';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 32) / 7);
 const TODAY = new Date().toISOString().split('T')[0];
+const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   housing: '🏠', utilities: '💡', transport: '🚗', food: '🍔',
   entertainment: '🎬', health: '❤️', savings: '💰', debt: '📉', other: '📦',
 };
 
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayOfMonth(year: number, month: number) {
+  return new Date(year, month, 1).getDay();
+}
+
+function toDateString(year: number, month: number, day: number) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// ─── Block Calendar Grid ──────────────────────────────────────────────────────
+function BlockCalendar({
+  year, month, selectedDate, onSelectDate, itemsByDate,
+}: {
+  year: number;
+  month: number;
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
+  itemsByDate: Record<string, DueItem[]>;
+}) {
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  // Pad to full weeks
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+
+  return (
+    <View style={gridStyles.grid}>
+      {/* Day headers */}
+      <View style={gridStyles.headerRow}>
+        {DAY_HEADERS.map((d) => (
+          <View key={d} style={gridStyles.headerCell}>
+            <Text style={gridStyles.headerText}>{d}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Week rows */}
+      {weeks.map((week, wi) => (
+        <View key={wi} style={gridStyles.weekRow}>
+          {week.map((day, di) => {
+            if (!day) return <View key={di} style={gridStyles.emptyCell} />;
+
+            const dateStr = toDateString(year, month, day);
+            const items = itemsByDate[dateStr] ?? [];
+            const isToday = dateStr === TODAY;
+            const isSelected = dateStr === selectedDate;
+            const unpaidItems = items.filter((i) => !i.isPaid);
+            const paidItems = items.filter((i) => i.isPaid);
+
+            return (
+              <TouchableOpacity
+                key={di}
+                style={[
+                  gridStyles.cell,
+                  isToday && gridStyles.todayCell,
+                  isSelected && gridStyles.selectedCell,
+                ]}
+                onPress={() => onSelectDate(dateStr)}
+                activeOpacity={0.75}
+              >
+                <Text style={[
+                  gridStyles.dayNum,
+                  isToday && gridStyles.todayNum,
+                  isSelected && gridStyles.selectedNum,
+                ]}>
+                  {day}
+                </Text>
+
+                {/* Show up to 2 item chips, then +N more */}
+                {unpaidItems.slice(0, 2).map((item) => (
+                  <View
+                    key={item.id}
+                    style={[gridStyles.itemChip, { backgroundColor: CATEGORY_COLORS[item.category] + '22', borderLeftColor: CATEGORY_COLORS[item.category] }]}
+                  >
+                    <Text style={[gridStyles.itemChipText, { color: CATEGORY_COLORS[item.category] }]} numberOfLines={1}>
+                      ${item.amount % 1 === 0 ? item.amount : item.amount.toFixed(0)}
+                    </Text>
+                  </View>
+                ))}
+
+                {unpaidItems.length > 2 && (
+                  <Text style={gridStyles.moreText}>+{unpaidItems.length - 2}</Text>
+                )}
+
+                {paidItems.length > 0 && unpaidItems.length === 0 && (
+                  <Ionicons name="checkmark-circle" size={12} color="#10B981" style={{ marginTop: 2 }} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ─── Item Row ─────────────────────────────────────────────────────────────────
 function ItemRow({ item, onEdit, onToggle, onDelete }: {
   item: DueItem;
   onEdit: () => void;
@@ -25,7 +142,10 @@ function ItemRow({ item, onEdit, onToggle, onDelete }: {
   const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
   return (
     <View style={[styles.itemRow, item.isPaid && styles.itemRowPaid]}>
-      <TouchableOpacity onPress={onToggle} style={[styles.checkCircle, { borderColor: color }, item.isPaid && { backgroundColor: color }]}>
+      <TouchableOpacity
+        onPress={onToggle}
+        style={[styles.checkCircle, { borderColor: color }, item.isPaid && { backgroundColor: color }]}
+      >
         {item.isPaid && <Ionicons name="checkmark" size={14} color="#fff" />}
       </TouchableOpacity>
       <View style={styles.itemInfo}>
@@ -47,29 +167,35 @@ function ItemRow({ item, onEdit, onToggle, onDelete }: {
   );
 }
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 function CalendarContent() {
-  const { getItemsForDate, getMarkedDates, updateItem, deleteItem } = useCalendar();
+  const { items, getItemsForDate, updateItem, deleteItem } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editItem, setEditItem] = useState<DueItem | null>(null);
 
-  const selectedItems = getItemsForDate(selectedDate);
-  const markedDates = getMarkedDates();
+  const todayDate = new Date();
+  const [viewYear, setViewYear] = useState(todayDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
 
+  const selectedItems = getItemsForDate(selectedDate);
   const totalDue = selectedItems.filter((i) => !i.isPaid).reduce((s, i) => s + i.amount, 0);
   const totalPaid = selectedItems.filter((i) => i.isPaid).reduce((s, i) => s + i.amount, 0);
 
-  const marked = {
-    ...markedDates,
-    [selectedDate]: {
-      ...(markedDates[selectedDate] ?? {}),
-      selected: true,
-      selectedColor: '#4F46E5',
-    },
-    [TODAY]: {
-      ...(markedDates[TODAY] ?? {}),
-      ...(selectedDate !== TODAY ? { marked: true, dotColor: '#4F46E5' } : {}),
-    },
+  // Group items by date for the grid
+  const itemsByDate: Record<string, DueItem[]> = {};
+  items.forEach((item) => {
+    if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
+    itemsByDate[item.date].push(item);
+  });
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
+    else setViewMonth((m) => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
+    else setViewMonth((m) => m + 1);
   };
 
   const handleDelete = (id: string) => {
@@ -84,6 +210,11 @@ function CalendarContent() {
     return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
+  const upcoming = items
+    .filter((i) => !i.isPaid && i.date >= TODAY)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 5);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -91,32 +222,33 @@ function CalendarContent() {
         <Text style={styles.headerSub}>Tap a date to view or add items</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Calendar
-          current={TODAY}
-          onDayPress={(day: { dateString: string }) => setSelectedDate(day.dateString)}
-          markingType="multi-dot"
-          markedDates={marked}
-          theme={{
-            backgroundColor: '#fff',
-            calendarBackground: '#fff',
-            selectedDayBackgroundColor: '#4F46E5',
-            selectedDayTextColor: '#fff',
-            todayTextColor: '#4F46E5',
-            dayTextColor: '#1F2937',
-            textDisabledColor: '#D1D5DB',
-            dotColor: '#4F46E5',
-            arrowColor: '#4F46E5',
-            monthTextColor: '#1F2937',
-            textMonthFontWeight: '800',
-            textMonthFontSize: 17,
-            textDayFontWeight: '500',
-            textDayHeaderFontWeight: '700',
-            textDayHeaderFontSize: 12,
-          }}
-          style={styles.calendar}
-        />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
 
+        {/* Month navigation */}
+        <View style={styles.monthNav}>
+          <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
+            <Ionicons name="chevron-back" size={22} color="#4F46E5" />
+          </TouchableOpacity>
+          <Text style={styles.monthTitle}>
+            {MONTH_NAMES[viewMonth]} {viewYear}
+          </Text>
+          <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
+            <Ionicons name="chevron-forward" size={22} color="#4F46E5" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Block calendar grid */}
+        <View style={styles.calendarWrapper}>
+          <BlockCalendar
+            year={viewYear}
+            month={viewMonth}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            itemsByDate={itemsByDate}
+          />
+        </View>
+
+        {/* Selected day panel */}
         <View style={styles.dayPanel}>
           <View style={styles.dayPanelHeader}>
             <View style={styles.dayPanelTitleRow}>
@@ -127,7 +259,6 @@ function CalendarContent() {
                 </View>
               )}
             </View>
-
             {selectedItems.length > 0 && (
               <View style={styles.daySummaryRow}>
                 <View style={styles.daySummaryChip}>
@@ -146,7 +277,7 @@ function CalendarContent() {
             <View style={styles.emptyDay}>
               <Ionicons name="calendar-outline" size={36} color="#E5E7EB" />
               <Text style={styles.emptyDayText}>Nothing due on this day</Text>
-              <Text style={styles.emptyDaySubText}>Tap the + button to add something</Text>
+              <Text style={styles.emptyDaySubText}>Tap the button below to add something</Text>
             </View>
           ) : (
             <View style={styles.itemList}>
@@ -171,10 +302,30 @@ function CalendarContent() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.upcomingSection}>
-          <Text style={styles.sectionTitle}>Upcoming this month</Text>
-          <UpcomingList />
-        </View>
+        {/* Upcoming section */}
+        {upcoming.length > 0 && (
+          <View style={styles.upcomingSection}>
+            <Text style={styles.sectionTitle}>Upcoming this month</Text>
+            {upcoming.map((item) => {
+              const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
+              const daysUntil = Math.ceil(
+                (new Date(item.date + 'T00:00:00').getTime() - new Date(TODAY + 'T00:00:00').getTime()) / 86400000
+              );
+              return (
+                <View key={item.id} style={styles.upcomingRow}>
+                  <View style={[styles.upcomingDot, { backgroundColor: color }]} />
+                  <View style={styles.upcomingInfo}>
+                    <Text style={styles.upcomingLabel}>{item.label}</Text>
+                    <Text style={styles.upcomingDate}>
+                      {item.date} · {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.upcomingAmount, { color }]}>${item.amount.toFixed(2)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       <DueItemModal
@@ -187,39 +338,6 @@ function CalendarContent() {
   );
 }
 
-function UpcomingList() {
-  const { items } = useCalendar();
-  const upcoming = items
-    .filter((i) => !i.isPaid && i.date >= TODAY)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 5);
-
-  if (upcoming.length === 0) return null;
-
-  return (
-    <View>
-      {upcoming.map((item) => {
-        const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
-        const daysUntil = Math.ceil(
-          (new Date(item.date + 'T00:00:00').getTime() - new Date(TODAY + 'T00:00:00').getTime()) / 86400000
-        );
-        return (
-          <View key={item.id} style={styles.upcomingRow}>
-            <View style={[styles.upcomingDot, { backgroundColor: color }]} />
-            <View style={styles.upcomingInfo}>
-              <Text style={styles.upcomingLabel}>{item.label}</Text>
-              <Text style={styles.upcomingDate}>
-                {item.date} · {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`}
-              </Text>
-            </View>
-            <Text style={[styles.upcomingAmount, { color }]}>${item.amount.toFixed(2)}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 export default function CalendarScreen() {
   return (
     <PremiumGate requiredTier="pro_lite">
@@ -228,47 +346,78 @@ export default function CalendarScreen() {
   );
 }
 
+// ─── Grid Styles ──────────────────────────────────────────────────────────────
+const gridStyles = StyleSheet.create({
+  grid: { width: '100%' },
+  headerRow: { flexDirection: 'row' },
+  headerCell: {
+    width: CELL_SIZE, height: 28,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerText: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase' },
+  weekRow: { flexDirection: 'row' },
+  emptyCell: { width: CELL_SIZE, height: CELL_SIZE + 10 },
+  cell: {
+    width: CELL_SIZE,
+    minHeight: CELL_SIZE + 10,
+    borderWidth: 0.5,
+    borderColor: '#E5E7EB',
+    padding: 3,
+    backgroundColor: '#fff',
+  },
+  todayCell: { backgroundColor: '#EEF2FF' },
+  selectedCell: { backgroundColor: '#4F46E5' },
+  dayNum: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 2 },
+  todayNum: { color: '#4F46E5', fontWeight: '800' },
+  selectedNum: { color: '#fff', fontWeight: '800' },
+  itemChip: {
+    borderLeftWidth: 2,
+    borderRadius: 3,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    marginBottom: 1,
+  },
+  itemChipText: { fontSize: 9, fontWeight: '700' },
+  moreText: { fontSize: 9, color: '#9CA3AF', fontWeight: '700', marginTop: 1 },
+});
+
+// ─── Screen Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6FA' },
   header: {
     backgroundColor: '#4F46E5',
-    paddingTop: 60,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingTop: 60, paddingBottom: 24, paddingHorizontal: 20,
+    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
   },
   headerTitle: { color: '#fff', fontSize: 28, fontWeight: '700' },
   headerSub: { color: '#C7D2FE', fontSize: 14, marginTop: 2 },
-  calendar: {
-    marginHorizontal: 12,
-    marginTop: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+  monthNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  navBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center',
+  },
+  monthTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
+  calendarWrapper: {
+    marginHorizontal: 16,
+    borderRadius: 16, overflow: 'hidden',
+    borderWidth: 0.5, borderColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
   dayPanel: {
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
-    marginTop: 16,
-    borderRadius: 20,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 14,
+    borderRadius: 20, padding: 18,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
   dayPanelHeader: { marginBottom: 12 },
   dayPanelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dayPanelDate: { fontSize: 16, fontWeight: '700', color: '#1F2937', flex: 1 },
-  todayBadge: {
-    backgroundColor: '#EEF2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3,
-  },
+  dayPanelDate: { fontSize: 15, fontWeight: '700', color: '#1F2937', flex: 1 },
+  todayBadge: { backgroundColor: '#EEF2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
   todayBadgeText: { color: '#4F46E5', fontSize: 11, fontWeight: '700' },
   daySummaryRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
   daySummaryChip: {
@@ -300,12 +449,11 @@ const styles = StyleSheet.create({
   addDayBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 8, marginTop: 14, paddingVertical: 10,
-    borderWidth: 1.5, borderColor: '#E0E7FF', borderRadius: 12,
-    borderStyle: 'dashed',
+    borderWidth: 1.5, borderColor: '#E0E7FF', borderRadius: 12, borderStyle: 'dashed',
   },
   addDayBtnText: { color: '#4F46E5', fontWeight: '700', fontSize: 14 },
   upcomingSection: {
-    marginHorizontal: 12, marginTop: 16, marginBottom: 32,
+    marginHorizontal: 16, marginTop: 14,
     backgroundColor: '#fff', borderRadius: 20, padding: 18,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 }, elevation: 2,
