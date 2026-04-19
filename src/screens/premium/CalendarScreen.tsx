@@ -6,7 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PremiumGate from '../../components/PremiumGate';
 import DueItemModal from '../../components/DueItemModal';
-import { useCalendar, DueItem, CATEGORY_COLORS } from '../../store/CalendarContext';
+import { useCalendar, DueItem } from '../../store/CalendarContext';
+import { useTheme } from '../../store/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CELL_SIZE = Math.floor((SCREEN_WIDTH - 32) / 7);
@@ -37,20 +38,20 @@ function toDateString(year: number, month: number, day: number) {
 
 // ─── Single calendar cell ─────────────────────────────────────────────────────
 function CalendarCell({
-  day, dateStr, isToday, isSelected, items, onPress, onLongPress,
+  day, isToday, isSelected, items, primaryColor, categoryColors, onPress, onLongPress,
 }: {
   day: number;
-  dateStr: string;
   isToday: boolean;
   isSelected: boolean;
   items: DueItem[];
+  primaryColor: string;
+  categoryColors: Record<string, string>;
   onPress: () => void;
   onLongPress: () => void;
 }) {
   const [pressed, setPressed] = useState(false);
   const unpaidItems = items.filter((i) => !i.isPaid);
   const paidItems   = items.filter((i) => i.isPaid);
-  const showCircle  = isToday || isSelected || pressed;
 
   return (
     <Pressable
@@ -60,18 +61,17 @@ function CalendarCell({
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
     >
-      {/* Date number with circle */}
       <View style={gridStyles.dayNumRow}>
         <View style={[
           gridStyles.dayCircle,
-          isToday    && gridStyles.dayCircleToday,
-          isSelected && !isToday && gridStyles.dayCircleSelected,
+          isToday && { backgroundColor: primaryColor },
+          isSelected && !isToday && { borderWidth: 2, borderColor: primaryColor, backgroundColor: primaryColor + '15' },
           pressed && !isToday && !isSelected && gridStyles.dayCircleHover,
         ]}>
           <Text style={[
             gridStyles.dayNum,
-            isToday    && gridStyles.dayNumToday,
-            isSelected && !isToday && gridStyles.dayNumSelected,
+            isToday && gridStyles.dayNumToday,
+            isSelected && !isToday && { color: primaryColor, fontWeight: '800' },
             pressed && !isToday && !isSelected && gridStyles.dayNumHover,
           ]}>
             {day}
@@ -79,14 +79,14 @@ function CalendarCell({
         </View>
       </View>
 
-      {/* Item chips: label + amount */}
       {unpaidItems.slice(0, 2).map((item) => {
-        const color = CATEGORY_COLORS[item.category];
+        const color = categoryColors[item.category] ?? '#6B7280';
         const amtStr = `$${item.amount % 1 === 0 ? item.amount : item.amount.toFixed(0)}`;
+        const prefix = item.emoji ? `${item.emoji} ` : '';
         return (
           <View key={item.id} style={[gridStyles.itemChip, { backgroundColor: color + '20', borderLeftColor: color }]}>
             <Text style={[gridStyles.itemChipText, { color }]} numberOfLines={1}>
-              {item.label} {amtStr}
+              {prefix}{item.label} {amtStr}
             </Text>
           </View>
         );
@@ -105,7 +105,7 @@ function CalendarCell({
 
 // ─── Block Calendar Grid ──────────────────────────────────────────────────────
 function BlockCalendar({
-  year, month, selectedDate, onSelectDate, onAddForDate, itemsByDate,
+  year, month, selectedDate, onSelectDate, onAddForDate, itemsByDate, primaryColor, categoryColors,
 }: {
   year: number;
   month: number;
@@ -113,6 +113,8 @@ function BlockCalendar({
   onSelectDate: (date: string) => void;
   onAddForDate: (date: string) => void;
   itemsByDate: Record<string, DueItem[]>;
+  primaryColor: string;
+  categoryColors: Record<string, string>;
 }) {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay    = getFirstDayOfMonth(year, month);
@@ -145,10 +147,11 @@ function BlockCalendar({
               <CalendarCell
                 key={di}
                 day={day}
-                dateStr={dateStr}
                 isToday={dateStr === TODAY}
                 isSelected={dateStr === selectedDate}
                 items={itemsByDate[dateStr] ?? []}
+                primaryColor={primaryColor}
+                categoryColors={categoryColors}
                 onPress={() => onSelectDate(dateStr)}
                 onLongPress={() => onAddForDate(dateStr)}
               />
@@ -167,7 +170,9 @@ function ItemRow({ item, onEdit, onToggle, onDelete }: {
   onToggle: () => void;
   onDelete: () => void;
 }) {
-  const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
+  const { categoryColors } = useTheme();
+  const color = categoryColors[item.category] ?? '#6B7280';
+  const displayEmoji = item.emoji || CATEGORY_EMOJIS[item.category] || '';
   return (
     <View style={[styles.itemRow, item.isPaid && styles.itemRowPaid]}>
       <TouchableOpacity
@@ -178,7 +183,7 @@ function ItemRow({ item, onEdit, onToggle, onDelete }: {
       </TouchableOpacity>
       <View style={styles.itemInfo}>
         <Text style={[styles.itemLabel, item.isPaid && styles.itemLabelPaid]}>
-          {CATEGORY_EMOJIS[item.category]} {item.label}
+          {displayEmoji} {item.label}
         </Text>
         <Text style={[styles.itemCategory, { color }]}>{item.category}</Text>
       </View>
@@ -219,6 +224,7 @@ function DayPanel({
   onAdd: () => void;
 }) {
   const { items, getItemsForDate, updateItem, deleteItem } = useCalendar();
+  const { primaryColor, categoryColors } = useTheme();
   const [upcomingOpen, setUpcomingOpen] = useState(true);
 
   const selectedItems = getItemsForDate(selectedDate);
@@ -251,7 +257,7 @@ function DayPanel({
           style={styles.dayNavBtn}
           onPress={() => onSelectDate(prevDate)}
         >
-          <Ionicons name="chevron-back" size={18} color="#4F46E5" />
+          <Ionicons name="chevron-back" size={18} color={primaryColor} />
           <View style={styles.dayNavHint}>
             <Text style={styles.dayNavHintDate}>{formatShort(prevDate)}</Text>
             <Text style={styles.dayNavHintSub} numberOfLines={1}>
@@ -284,7 +290,7 @@ function DayPanel({
               {nextItems.length > 0 ? `${nextItems.length} item${nextItems.length > 1 ? 's' : ''}` : 'Nothing due'}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#4F46E5" />
+          <Ionicons name="chevron-forward" size={18} color={primaryColor} />
         </TouchableOpacity>
       </View>
 
@@ -303,9 +309,9 @@ function DayPanel({
         </View>
       )}
 
-      <TouchableOpacity style={styles.addDayBtn} onPress={onAdd}>
-        <Ionicons name="add-circle" size={18} color="#4F46E5" />
-        <Text style={styles.addDayBtnText}>Add item on this date</Text>
+      <TouchableOpacity style={[styles.addDayBtn, { borderColor: primaryColor + '60' }]} onPress={onAdd}>
+        <Ionicons name="add-circle" size={18} color={primaryColor} />
+        <Text style={[styles.addDayBtnText, { color: primaryColor }]}>Add item on this date</Text>
       </TouchableOpacity>
 
       {/* ── Divider ── */}
@@ -331,7 +337,7 @@ function DayPanel({
             <Text style={styles.upcomingEmpty}>No upcoming items</Text>
           ) : (
             upcoming.map((item) => {
-              const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
+              const color = categoryColors[item.category] ?? '#6B7280';
               const daysUntil = Math.ceil(
                 (new Date(item.date + 'T00:00:00').getTime() - new Date(TODAY + 'T00:00:00').getTime()) / 86400000
               );
@@ -363,6 +369,7 @@ function DayPanel({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function CalendarContent() {
   const { items } = useCalendar();
+  const { primaryColor, categoryColors } = useTheme();
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editItem, setEditItem] = useState<DueItem | null>(null);
@@ -371,7 +378,6 @@ function CalendarContent() {
   const [viewYear, setViewYear] = useState(todayDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
 
-  // When selected date changes, keep the grid month in sync
   const handleSelectDate = (date: string) => {
     const d = new Date(date + 'T00:00:00');
     setSelectedDate(date);
@@ -396,19 +402,19 @@ function CalendarContent() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: primaryColor }]}>
         <Text style={styles.headerTitle}>Calendar</Text>
         <Text style={styles.headerSub}>Tap a date to view or add items</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
-            <Ionicons name="chevron-back" size={22} color="#4F46E5" />
+          <TouchableOpacity onPress={prevMonth} style={[styles.navBtn, { backgroundColor: primaryColor + '18' }]}>
+            <Ionicons name="chevron-back" size={22} color={primaryColor} />
           </TouchableOpacity>
           <Text style={styles.monthTitle}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
-            <Ionicons name="chevron-forward" size={22} color="#4F46E5" />
+          <TouchableOpacity onPress={nextMonth} style={[styles.navBtn, { backgroundColor: primaryColor + '18' }]}>
+            <Ionicons name="chevron-forward" size={22} color={primaryColor} />
           </TouchableOpacity>
         </View>
 
@@ -420,6 +426,8 @@ function CalendarContent() {
             onSelectDate={handleSelectDate}
             onAddForDate={(date) => { handleSelectDate(date); setEditItem(null); setShowAddModal(true); }}
             itemsByDate={itemsByDate}
+            primaryColor={primaryColor}
+            categoryColors={categoryColors}
           />
         </View>
 

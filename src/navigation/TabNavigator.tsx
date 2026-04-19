@@ -8,33 +8,45 @@ import TransactionsScreen from '../screens/free/TransactionsScreen';
 import AddBudgetScreen from '../screens/free/AddBudgetScreen';
 import CalendarScreen from '../screens/premium/CalendarScreen';
 import SwipeScreen from '../screens/premium/SwipeScreen';
+import CustomizeScreen from '../screens/premium/CustomizeScreen';
 import ProfileScreen from '../screens/free/ProfileScreen';
+import { useTheme } from '../store/ThemeContext';
 
 const Tab = createBottomTabNavigator();
 
-function AddButton({ onPress }: { onPress: () => void }) {
+function AddButton({ onPress, color }: { onPress: () => void; color: string }) {
   return (
-    <TouchableOpacity style={styles.addButton} onPress={onPress}>
+    <TouchableOpacity style={[styles.addButton, { backgroundColor: color, shadowColor: color }]} onPress={onPress}>
       <Ionicons name="add" size={30} color="#fff" />
     </TouchableOpacity>
   );
 }
 
-function ProBadge() {
+function LiteBadge() {
   return (
-    <View style={styles.proBadge}>
-      <Text style={styles.proBadgeText}>LITE</Text>
+    <View style={[styles.badge, { backgroundColor: '#F59E0B' }]}>
+      <Text style={styles.badgeText}>LITE</Text>
+    </View>
+  );
+}
+
+function UltraBadge() {
+  return (
+    <View style={[styles.badge, { backgroundColor: '#7C3AED' }]}>
+      <Text style={styles.badgeText}>ULTRA</Text>
     </View>
   );
 }
 
 export default function TabNavigator() {
+  const { primaryColor } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#4F46E5',
+        tabBarActiveTintColor: primaryColor,
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarLabelStyle: styles.tabLabel,
       }}
@@ -43,18 +55,14 @@ export default function TabNavigator() {
         name="Budgets"
         component={BudgetListScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="wallet-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" size={size} color={color} />,
         }}
       />
       <Tab.Screen
         name="Transactions"
         component={TransactionsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} />,
         }}
       />
       <Tab.Screen
@@ -64,7 +72,7 @@ export default function TabNavigator() {
           tabBarLabel: '',
           tabBarIcon: () => null,
           tabBarButton: (props) => (
-            <AddButton onPress={() => props.onPress?.()} />
+            <AddButton color={primaryColor} onPress={() => props.onPress?.()} />
           ),
         }}
       />
@@ -75,7 +83,7 @@ export default function TabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <View>
               <Ionicons name="swap-horizontal-outline" size={size} color={color} />
-              <ProBadge />
+              <LiteBadge />
             </View>
           ),
         }}
@@ -87,7 +95,19 @@ export default function TabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <View>
               <Ionicons name="calendar-outline" size={size} color={color} />
-              <ProBadge />
+              <LiteBadge />
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Customize"
+        component={CustomizeScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <Ionicons name="color-palette-outline" size={size} color={color} />
+              <UltraBadge />
             </View>
           ),
         }}
@@ -96,9 +116,7 @@ export default function TabNavigator() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
     </Tab.Navigator>
@@ -118,29 +136,16 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     paddingTop: 8,
   },
-  tabLabel: { fontSize: 11, fontWeight: '600' },
+  tabLabel: { fontSize: 10, fontWeight: '600' },
   addButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#4F46E5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#4F46E5',
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    width: 58, height: 58, borderRadius: 29,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20, shadowOpacity: 0.5,
+    shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
-  proBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -8,
-    backgroundColor: '#F59E0B',
-    borderRadius: 6,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+  badge: {
+    position: 'absolute', top: -4, right: -10,
+    borderRadius: 6, paddingHorizontal: 3, paddingVertical: 1,
   },
-  proBadgeText: { fontSize: 7, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
+  badgeText: { fontSize: 7, fontWeight: '900', color: '#fff', letterSpacing: 0.3 },
 });
