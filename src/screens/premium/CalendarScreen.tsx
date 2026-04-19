@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert, Dimensions,
+  TouchableOpacity, Alert, Dimensions, Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PremiumGate from '../../components/PremiumGate';
@@ -35,35 +35,99 @@ function toDateString(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+// ─── Single calendar cell ─────────────────────────────────────────────────────
+function CalendarCell({
+  day, dateStr, isToday, isSelected, items, onPress, onLongPress,
+}: {
+  day: number;
+  dateStr: string;
+  isToday: boolean;
+  isSelected: boolean;
+  items: DueItem[];
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const [pressed, setPressed] = useState(false);
+  const unpaidItems = items.filter((i) => !i.isPaid);
+  const paidItems   = items.filter((i) => i.isPaid);
+  const showCircle  = isToday || isSelected || pressed;
+
+  return (
+    <Pressable
+      style={gridStyles.cell}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+    >
+      {/* Date number with circle */}
+      <View style={gridStyles.dayNumRow}>
+        <View style={[
+          gridStyles.dayCircle,
+          isToday    && gridStyles.dayCircleToday,
+          isSelected && !isToday && gridStyles.dayCircleSelected,
+          pressed && !isToday && !isSelected && gridStyles.dayCircleHover,
+        ]}>
+          <Text style={[
+            gridStyles.dayNum,
+            isToday    && gridStyles.dayNumToday,
+            isSelected && !isToday && gridStyles.dayNumSelected,
+            pressed && !isToday && !isSelected && gridStyles.dayNumHover,
+          ]}>
+            {day}
+          </Text>
+        </View>
+      </View>
+
+      {/* Item chips: label + amount */}
+      {unpaidItems.slice(0, 2).map((item) => {
+        const color = CATEGORY_COLORS[item.category];
+        const amtStr = `$${item.amount % 1 === 0 ? item.amount : item.amount.toFixed(0)}`;
+        return (
+          <View key={item.id} style={[gridStyles.itemChip, { backgroundColor: color + '20', borderLeftColor: color }]}>
+            <Text style={[gridStyles.itemChipText, { color }]} numberOfLines={1}>
+              {item.label} {amtStr}
+            </Text>
+          </View>
+        );
+      })}
+
+      {unpaidItems.length > 2 && (
+        <Text style={gridStyles.moreText}>+{unpaidItems.length - 2} more</Text>
+      )}
+
+      {paidItems.length > 0 && unpaidItems.length === 0 && (
+        <Ionicons name="checkmark-circle" size={12} color="#10B981" style={{ marginTop: 2 }} />
+      )}
+    </Pressable>
+  );
+}
+
 // ─── Block Calendar Grid ──────────────────────────────────────────────────────
 function BlockCalendar({
-  year, month, selectedDate, onSelectDate, itemsByDate,
+  year, month, selectedDate, onSelectDate, onAddForDate, itemsByDate,
 }: {
   year: number;
   month: number;
   selectedDate: string;
   onSelectDate: (date: string) => void;
+  onAddForDate: (date: string) => void;
   itemsByDate: Record<string, DueItem[]>;
 }) {
   const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getFirstDayOfMonth(year, month);
+  const firstDay    = getFirstDayOfMonth(year, month);
 
   const cells: (number | null)[] = [
     ...Array(firstDay).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
-
-  // Pad to full weeks
   while (cells.length % 7 !== 0) cells.push(null);
 
   const weeks: (number | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   return (
     <View style={gridStyles.grid}>
-      {/* Day headers */}
       <View style={gridStyles.headerRow}>
         {DAY_HEADERS.map((d) => (
           <View key={d} style={gridStyles.headerCell}>
@@ -72,58 +136,22 @@ function BlockCalendar({
         ))}
       </View>
 
-      {/* Week rows */}
       {weeks.map((week, wi) => (
         <View key={wi} style={gridStyles.weekRow}>
           {week.map((day, di) => {
             if (!day) return <View key={di} style={gridStyles.emptyCell} />;
-
             const dateStr = toDateString(year, month, day);
-            const items = itemsByDate[dateStr] ?? [];
-            const isToday = dateStr === TODAY;
-            const isSelected = dateStr === selectedDate;
-            const unpaidItems = items.filter((i) => !i.isPaid);
-            const paidItems = items.filter((i) => i.isPaid);
-
             return (
-              <TouchableOpacity
+              <CalendarCell
                 key={di}
-                style={[
-                  gridStyles.cell,
-                  isToday && gridStyles.todayCell,
-                  isSelected && gridStyles.selectedCell,
-                ]}
+                day={day}
+                dateStr={dateStr}
+                isToday={dateStr === TODAY}
+                isSelected={dateStr === selectedDate}
+                items={itemsByDate[dateStr] ?? []}
                 onPress={() => onSelectDate(dateStr)}
-                activeOpacity={0.75}
-              >
-                <Text style={[
-                  gridStyles.dayNum,
-                  isToday && gridStyles.todayNum,
-                  isSelected && gridStyles.selectedNum,
-                ]}>
-                  {day}
-                </Text>
-
-                {/* Show up to 2 item chips, then +N more */}
-                {unpaidItems.slice(0, 2).map((item) => (
-                  <View
-                    key={item.id}
-                    style={[gridStyles.itemChip, { backgroundColor: CATEGORY_COLORS[item.category] + '22', borderLeftColor: CATEGORY_COLORS[item.category] }]}
-                  >
-                    <Text style={[gridStyles.itemChipText, { color: CATEGORY_COLORS[item.category] }]} numberOfLines={1}>
-                      ${item.amount % 1 === 0 ? item.amount : item.amount.toFixed(0)}
-                    </Text>
-                  </View>
-                ))}
-
-                {unpaidItems.length > 2 && (
-                  <Text style={gridStyles.moreText}>+{unpaidItems.length - 2}</Text>
-                )}
-
-                {paidItems.length > 0 && unpaidItems.length === 0 && (
-                  <Ionicons name="checkmark-circle" size={12} color="#10B981" style={{ marginTop: 2 }} />
-                )}
-              </TouchableOpacity>
+                onLongPress={() => onAddForDate(dateStr)}
+              />
             );
           })}
         </View>
@@ -390,6 +418,7 @@ function CalendarContent() {
             month={viewMonth}
             selectedDate={selectedDate}
             onSelectDate={handleSelectDate}
+            onAddForDate={(date) => { handleSelectDate(date); setEditItem(null); setShowAddModal(true); }}
             itemsByDate={itemsByDate}
           />
         </View>
@@ -421,38 +450,47 @@ export default function CalendarScreen() {
 }
 
 // ─── Grid Styles ──────────────────────────────────────────────────────────────
+const CIRCLE_SIZE = Math.min(CELL_SIZE - 6, 26);
+
 const gridStyles = StyleSheet.create({
   grid: { width: '100%' },
   headerRow: { flexDirection: 'row' },
-  headerCell: {
-    width: CELL_SIZE, height: 28,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  headerCell: { width: CELL_SIZE, height: 28, alignItems: 'center', justifyContent: 'center' },
   headerText: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase' },
   weekRow: { flexDirection: 'row' },
-  emptyCell: { width: CELL_SIZE, height: CELL_SIZE + 10 },
+  emptyCell: { width: CELL_SIZE, minHeight: CELL_SIZE + 14 },
   cell: {
     width: CELL_SIZE,
-    minHeight: CELL_SIZE + 10,
+    minHeight: CELL_SIZE + 14,
     borderWidth: 0.5,
     borderColor: '#E5E7EB',
-    padding: 3,
+    paddingBottom: 4,
+    paddingHorizontal: 2,
     backgroundColor: '#fff',
   },
-  todayCell: { backgroundColor: '#EEF2FF' },
-  selectedCell: { backgroundColor: '#4F46E5' },
-  dayNum: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 2 },
-  todayNum: { color: '#4F46E5', fontWeight: '800' },
-  selectedNum: { color: '#fff', fontWeight: '800' },
-  itemChip: {
-    borderLeftWidth: 2,
-    borderRadius: 3,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
-    marginBottom: 1,
+
+  // Date number circle
+  dayNumRow: { alignItems: 'center', marginBottom: 3, marginTop: 2 },
+  dayCircle: {
+    width: CIRCLE_SIZE, height: CIRCLE_SIZE, borderRadius: CIRCLE_SIZE / 2,
+    alignItems: 'center', justifyContent: 'center',
   },
-  itemChipText: { fontSize: 9, fontWeight: '700' },
-  moreText: { fontSize: 9, color: '#9CA3AF', fontWeight: '700', marginTop: 1 },
+  dayCircleToday: { backgroundColor: '#4F46E5' },
+  dayCircleSelected: { backgroundColor: '#EEF2FF', borderWidth: 2, borderColor: '#4F46E5' },
+  dayCircleHover: { backgroundColor: '#F3F4F6' },
+
+  dayNum: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  dayNumToday: { color: '#fff', fontWeight: '800' },
+  dayNumSelected: { color: '#4F46E5', fontWeight: '800' },
+  dayNumHover: { color: '#1F2937', fontWeight: '700' },
+
+  // Item chips with label
+  itemChip: {
+    borderLeftWidth: 2, borderRadius: 3,
+    paddingHorizontal: 3, paddingVertical: 1, marginBottom: 2,
+  },
+  itemChipText: { fontSize: 8, fontWeight: '700' },
+  moreText: { fontSize: 8, color: '#9CA3AF', fontWeight: '700', marginTop: 1, paddingHorizontal: 3 },
 });
 
 // ─── Screen Styles ────────────────────────────────────────────────────────────
