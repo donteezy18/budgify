@@ -167,9 +167,174 @@ function ItemRow({ item, onEdit, onToggle, onDelete }: {
   );
 }
 
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function formatShort(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// ─── Unified Day + Upcoming Panel ────────────────────────────────────────────
+function DayPanel({
+  selectedDate,
+  onSelectDate,
+  onEdit,
+  onAdd,
+}: {
+  selectedDate: string;
+  onSelectDate: (d: string) => void;
+  onEdit: (item: DueItem) => void;
+  onAdd: () => void;
+}) {
+  const { items, getItemsForDate, updateItem, deleteItem } = useCalendar();
+  const [upcomingOpen, setUpcomingOpen] = useState(true);
+
+  const selectedItems = getItemsForDate(selectedDate);
+  const totalDue = selectedItems.filter((i) => !i.isPaid).reduce((s, i) => s + i.amount, 0);
+  const totalPaid = selectedItems.filter((i) => i.isPaid).reduce((s, i) => s + i.amount, 0);
+  const isToday = selectedDate === TODAY;
+
+  const upcoming = items
+    .filter((i) => !i.isPaid && i.date >= TODAY)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 6);
+
+  const handleDelete = (id: string) => {
+    Alert.alert('Delete Item', 'Remove this from your calendar?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteItem(id) },
+    ]);
+  };
+
+  const prevDate = shiftDate(selectedDate, -1);
+  const nextDate = shiftDate(selectedDate, 1);
+  const prevItems = getItemsForDate(prevDate);
+  const nextItems = getItemsForDate(nextDate);
+
+  return (
+    <View style={styles.unifiedCard}>
+      {/* ── Day navigation row ── */}
+      <View style={styles.dayNavRow}>
+        <TouchableOpacity
+          style={styles.dayNavBtn}
+          onPress={() => onSelectDate(prevDate)}
+        >
+          <Ionicons name="chevron-back" size={18} color="#4F46E5" />
+          <View style={styles.dayNavHint}>
+            <Text style={styles.dayNavHintDate}>{formatShort(prevDate)}</Text>
+            <Text style={styles.dayNavHintSub} numberOfLines={1}>
+              {prevItems.length > 0 ? `${prevItems.length} item${prevItems.length > 1 ? 's' : ''}` : 'Nothing due'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.dayNavCenter}>
+          <Text style={styles.dayNavTitle} numberOfLines={1}>
+            {isToday ? 'Today' : formatShort(selectedDate)}
+          </Text>
+          {selectedItems.length === 0 ? (
+            <Text style={styles.dayNavEmpty}>Nothing due</Text>
+          ) : (
+            <View style={styles.dayNavSummary}>
+              <Text style={styles.dayNavDue}>-${totalDue.toFixed(2)}</Text>
+              {totalPaid > 0 && <Text style={styles.dayNavPaid}>✓${totalPaid.toFixed(2)}</Text>}
+            </View>
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.dayNavBtn, styles.dayNavBtnRight]}
+          onPress={() => onSelectDate(nextDate)}
+        >
+          <View style={styles.dayNavHint}>
+            <Text style={styles.dayNavHintDate}>{formatShort(nextDate)}</Text>
+            <Text style={styles.dayNavHintSub} numberOfLines={1}>
+              {nextItems.length > 0 ? `${nextItems.length} item${nextItems.length > 1 ? 's' : ''}` : 'Nothing due'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#4F46E5" />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Item list ── */}
+      {selectedItems.length > 0 && (
+        <View style={styles.itemList}>
+          {selectedItems.map((item) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              onEdit={() => onEdit(item)}
+              onToggle={() => updateItem(item.id, { isPaid: !item.isPaid })}
+              onDelete={() => handleDelete(item.id)}
+            />
+          ))}
+        </View>
+      )}
+
+      <TouchableOpacity style={styles.addDayBtn} onPress={onAdd}>
+        <Ionicons name="add-circle" size={18} color="#4F46E5" />
+        <Text style={styles.addDayBtnText}>Add item on this date</Text>
+      </TouchableOpacity>
+
+      {/* ── Divider ── */}
+      <View style={styles.divider} />
+
+      {/* ── Upcoming collapsible ── */}
+      <TouchableOpacity
+        style={styles.upcomingToggle}
+        onPress={() => setUpcomingOpen((o) => !o)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.upcomingToggleText}>Upcoming this month</Text>
+        <Ionicons
+          name={upcomingOpen ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color="#6B7280"
+        />
+      </TouchableOpacity>
+
+      {upcomingOpen && (
+        <View style={styles.upcomingList}>
+          {upcoming.length === 0 ? (
+            <Text style={styles.upcomingEmpty}>No upcoming items</Text>
+          ) : (
+            upcoming.map((item) => {
+              const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
+              const daysUntil = Math.ceil(
+                (new Date(item.date + 'T00:00:00').getTime() - new Date(TODAY + 'T00:00:00').getTime()) / 86400000
+              );
+              const whenLabel = daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil}d`;
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.upcomingRow}
+                  onPress={() => onSelectDate(item.date)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.upcomingDot, { backgroundColor: color }]} />
+                  <View style={styles.upcomingInfo}>
+                    <Text style={styles.upcomingLabel}>{item.label}</Text>
+                    <Text style={[styles.upcomingWhen, { color }]}>{whenLabel}</Text>
+                  </View>
+                  <Text style={[styles.upcomingAmount, { color }]}>${item.amount.toFixed(2)}</Text>
+                  <Ionicons name="chevron-forward" size={14} color="#D1D5DB" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function CalendarContent() {
-  const { items, getItemsForDate, updateItem, deleteItem } = useCalendar();
+  const { items } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editItem, setEditItem] = useState<DueItem | null>(null);
@@ -178,11 +343,14 @@ function CalendarContent() {
   const [viewYear, setViewYear] = useState(todayDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
 
-  const selectedItems = getItemsForDate(selectedDate);
-  const totalDue = selectedItems.filter((i) => !i.isPaid).reduce((s, i) => s + i.amount, 0);
-  const totalPaid = selectedItems.filter((i) => i.isPaid).reduce((s, i) => s + i.amount, 0);
+  // When selected date changes, keep the grid month in sync
+  const handleSelectDate = (date: string) => {
+    const d = new Date(date + 'T00:00:00');
+    setSelectedDate(date);
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+  };
 
-  // Group items by date for the grid
   const itemsByDate: Record<string, DueItem[]> = {};
   items.forEach((item) => {
     if (!itemsByDate[item.date]) itemsByDate[item.date] = [];
@@ -198,23 +366,6 @@ function CalendarContent() {
     else setViewMonth((m) => m + 1);
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Delete Item', 'Remove this from your calendar?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteItem(id) },
-    ]);
-  };
-
-  const formatDisplayDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  };
-
-  const upcoming = items
-    .filter((i) => !i.isPaid && i.date >= TODAY)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, 5);
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -223,109 +374,32 @@ function CalendarContent() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-
-        {/* Month navigation */}
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn}>
             <Ionicons name="chevron-back" size={22} color="#4F46E5" />
           </TouchableOpacity>
-          <Text style={styles.monthTitle}>
-            {MONTH_NAMES[viewMonth]} {viewYear}
-          </Text>
+          <Text style={styles.monthTitle}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
           <TouchableOpacity onPress={nextMonth} style={styles.navBtn}>
             <Ionicons name="chevron-forward" size={22} color="#4F46E5" />
           </TouchableOpacity>
         </View>
 
-        {/* Block calendar grid */}
         <View style={styles.calendarWrapper}>
           <BlockCalendar
             year={viewYear}
             month={viewMonth}
             selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
+            onSelectDate={handleSelectDate}
             itemsByDate={itemsByDate}
           />
         </View>
 
-        {/* Selected day panel */}
-        <View style={styles.dayPanel}>
-          <View style={styles.dayPanelHeader}>
-            <View style={styles.dayPanelTitleRow}>
-              <Text style={styles.dayPanelDate}>{formatDisplayDate(selectedDate)}</Text>
-              {selectedDate === TODAY && (
-                <View style={styles.todayBadge}>
-                  <Text style={styles.todayBadgeText}>Today</Text>
-                </View>
-              )}
-            </View>
-            {selectedItems.length > 0 && (
-              <View style={styles.daySummaryRow}>
-                <View style={styles.daySummaryChip}>
-                  <Text style={styles.daySummaryLabel}>Due</Text>
-                  <Text style={[styles.daySummaryValue, { color: '#EF4444' }]}>${totalDue.toFixed(2)}</Text>
-                </View>
-                <View style={styles.daySummaryChip}>
-                  <Text style={styles.daySummaryLabel}>Paid</Text>
-                  <Text style={[styles.daySummaryValue, { color: '#10B981' }]}>${totalPaid.toFixed(2)}</Text>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {selectedItems.length === 0 ? (
-            <View style={styles.emptyDay}>
-              <Ionicons name="calendar-outline" size={36} color="#E5E7EB" />
-              <Text style={styles.emptyDayText}>Nothing due on this day</Text>
-              <Text style={styles.emptyDaySubText}>Tap the button below to add something</Text>
-            </View>
-          ) : (
-            <View style={styles.itemList}>
-              {selectedItems.map((item) => (
-                <ItemRow
-                  key={item.id}
-                  item={item}
-                  onEdit={() => { setEditItem(item); setShowAddModal(true); }}
-                  onToggle={() => updateItem(item.id, { isPaid: !item.isPaid })}
-                  onDelete={() => handleDelete(item.id)}
-                />
-              ))}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.addDayBtn}
-            onPress={() => { setEditItem(null); setShowAddModal(true); }}
-          >
-            <Ionicons name="add-circle" size={20} color="#4F46E5" />
-            <Text style={styles.addDayBtnText}>Add item on this date</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Upcoming section */}
-        {upcoming.length > 0 && (
-          <View style={styles.upcomingSection}>
-            <Text style={styles.sectionTitle}>Upcoming this month</Text>
-            {upcoming.map((item) => {
-              const color = CATEGORY_COLORS[item.category] ?? '#6B7280';
-              const daysUntil = Math.ceil(
-                (new Date(item.date + 'T00:00:00').getTime() - new Date(TODAY + 'T00:00:00').getTime()) / 86400000
-              );
-              return (
-                <View key={item.id} style={styles.upcomingRow}>
-                  <View style={[styles.upcomingDot, { backgroundColor: color }]} />
-                  <View style={styles.upcomingInfo}>
-                    <Text style={styles.upcomingLabel}>{item.label}</Text>
-                    <Text style={styles.upcomingDate}>
-                      {item.date} · {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`}
-                    </Text>
-                  </View>
-                  <Text style={[styles.upcomingAmount, { color }]}>${item.amount.toFixed(2)}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
+        <DayPanel
+          selectedDate={selectedDate}
+          onSelectDate={handleSelectDate}
+          onEdit={(item) => { setEditItem(item); setShowAddModal(true); }}
+          onAdd={() => { setEditItem(null); setShowAddModal(true); }}
+        />
       </ScrollView>
 
       <DueItemModal
@@ -401,40 +475,46 @@ const styles = StyleSheet.create({
   },
   monthTitle: { fontSize: 18, fontWeight: '800', color: '#1F2937' },
   calendarWrapper: {
-    marginHorizontal: 16,
-    borderRadius: 16, overflow: 'hidden',
-    borderWidth: 0.5, borderColor: '#E5E7EB',
-    backgroundColor: '#fff',
+    marginHorizontal: 16, borderRadius: 16, overflow: 'hidden',
+    borderWidth: 0.5, borderColor: '#E5E7EB', backgroundColor: '#fff',
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  dayPanel: {
-    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 14,
-    borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 }, elevation: 2,
+
+  // ── Unified card ──
+  unifiedCard: {
+    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 14, marginBottom: 4,
+    borderRadius: 20, paddingTop: 4, paddingBottom: 18, paddingHorizontal: 16,
+    shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 }, elevation: 3,
   },
-  dayPanelHeader: { marginBottom: 12 },
-  dayPanelTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dayPanelDate: { fontSize: 15, fontWeight: '700', color: '#1F2937', flex: 1 },
-  todayBadge: { backgroundColor: '#EEF2FF', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  todayBadgeText: { color: '#4F46E5', fontSize: 11, fontWeight: '700' },
-  daySummaryRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  daySummaryChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#F9FAFB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6,
+
+  // ── Day navigation row ──
+  dayNavRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, gap: 4,
   },
-  daySummaryLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
-  daySummaryValue: { fontSize: 14, fontWeight: '800' },
-  emptyDay: { alignItems: 'center', paddingVertical: 24 },
-  emptyDayText: { fontSize: 15, color: '#9CA3AF', marginTop: 10, fontWeight: '600' },
-  emptyDaySubText: { fontSize: 13, color: '#D1D5DB', marginTop: 4 },
-  itemList: { gap: 10 },
+  dayNavBtn: {
+    flexDirection: 'row', alignItems: 'center', flex: 1, gap: 4,
+  },
+  dayNavBtnRight: { justifyContent: 'flex-end' },
+  dayNavHint: { flex: 1 },
+  dayNavHintDate: { fontSize: 11, fontWeight: '700', color: '#6B7280' },
+  dayNavHintSub: { fontSize: 10, color: '#9CA3AF', marginTop: 1 },
+  dayNavCenter: { flex: 1.4, alignItems: 'center' },
+  dayNavTitle: { fontSize: 14, fontWeight: '800', color: '#1F2937', textAlign: 'center' },
+  dayNavEmpty: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  dayNavSummary: { flexDirection: 'row', gap: 6, marginTop: 2, alignItems: 'center' },
+  dayNavDue: { fontSize: 12, fontWeight: '800', color: '#EF4444' },
+  dayNavPaid: { fontSize: 12, fontWeight: '700', color: '#10B981' },
+
+  // ── Item list ──
+  itemList: { gap: 8, marginBottom: 4 },
   itemRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#F9FAFB', borderRadius: 12, padding: 12, gap: 10,
   },
-  itemRowPaid: { opacity: 0.6 },
+  itemRowPaid: { opacity: 0.55 },
   checkCircle: {
     width: 24, height: 24, borderRadius: 12,
     borderWidth: 2, alignItems: 'center', justifyContent: 'center',
@@ -446,26 +526,31 @@ const styles = StyleSheet.create({
   itemAmount: { fontSize: 15, fontWeight: '800', color: '#1F2937' },
   itemAmountPaid: { color: '#9CA3AF', textDecorationLine: 'line-through' },
   iconBtn: { padding: 4 },
+
   addDayBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginTop: 14, paddingVertical: 10,
+    gap: 6, marginTop: 10, paddingVertical: 9,
     borderWidth: 1.5, borderColor: '#E0E7FF', borderRadius: 12, borderStyle: 'dashed',
   },
-  addDayBtnText: { color: '#4F46E5', fontWeight: '700', fontSize: 14 },
-  upcomingSection: {
-    marginHorizontal: 16, marginTop: 14,
-    backgroundColor: '#fff', borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  addDayBtnText: { color: '#4F46E5', fontWeight: '700', fontSize: 13 },
+
+  divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 14 },
+
+  // ── Upcoming collapsible ──
+  upcomingToggle: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 2,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1F2937', marginBottom: 14 },
+  upcomingToggleText: { fontSize: 15, fontWeight: '800', color: '#1F2937' },
+  upcomingList: { marginTop: 10, gap: 2 },
+  upcomingEmpty: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', paddingVertical: 12 },
   upcomingRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#F9FAFB',
   },
-  upcomingDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+  upcomingDot: { width: 9, height: 9, borderRadius: 5, marginRight: 10 },
   upcomingInfo: { flex: 1 },
-  upcomingLabel: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  upcomingDate: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  upcomingAmount: { fontSize: 14, fontWeight: '800' },
+  upcomingLabel: { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+  upcomingWhen: { fontSize: 11, fontWeight: '700', marginTop: 1 },
+  upcomingAmount: { fontSize: 13, fontWeight: '800' },
 });
