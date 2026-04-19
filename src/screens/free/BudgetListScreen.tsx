@@ -226,19 +226,25 @@ function AddBudgetForm({ onAdd, primaryColor }: {
   );
 }
 
-function IncomeTab({ primaryColor }: { primaryColor: string }) {
-  const [income, setIncome] = useState('');
-  const [saved, setSaved] = useState<number | null>(null);
-
-  const handleSave = () => {
-    const val = Number(income);
-    if (val > 0) setSaved(val);
-  };
+function IncomeTab({
+  primaryColor, categoryColors, budgets, monthlyIncome, onSaveIncome,
+}: {
+  primaryColor: string;
+  categoryColors: Record<string, string>;
+  budgets: Budget[];
+  monthlyIncome: number | null;
+  onSaveIncome: (val: number) => void;
+}) {
+  const [input, setInput] = useState(monthlyIncome !== null ? String(monthlyIncome) : '');
+  const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0);
+  const unallocated = monthlyIncome !== null ? monthlyIncome - totalBudgeted : null;
+  const canSave = Number(input) > 0;
 
   return (
     <View style={incomeStyles.wrap}>
       <Text style={incomeStyles.heading}>Expected Monthly Income</Text>
-      <Text style={incomeStyles.sub}>Set your take-home pay so Budgify can show how your budgets compare.</Text>
+      <Text style={incomeStyles.sub}>Set your take-home pay to see how your budgets stack up.</Text>
+
       <View style={incomeStyles.inputRow}>
         <Text style={incomeStyles.dollar}>$</Text>
         <TextInput
@@ -246,23 +252,86 @@ function IncomeTab({ primaryColor }: { primaryColor: string }) {
           placeholder="0.00"
           placeholderTextColor="#9CA3AF"
           keyboardType="decimal-pad"
-          value={income}
-          onChangeText={setIncome}
+          value={input}
+          onChangeText={setInput}
         />
       </View>
       <TouchableOpacity
-        style={[incomeStyles.btn, { backgroundColor: Number(income) > 0 ? primaryColor : '#D1D5DB' }]}
-        disabled={Number(income) <= 0}
-        onPress={handleSave}
+        style={[incomeStyles.btn, { backgroundColor: canSave ? primaryColor : '#D1D5DB', shadowColor: primaryColor }]}
+        disabled={!canSave}
+        onPress={() => canSave && onSaveIncome(Number(input))}
+        activeOpacity={0.75}
       >
-        <Text style={incomeStyles.btnText}>Save Income</Text>
+        <Text style={incomeStyles.btnText}>
+          {monthlyIncome !== null ? 'Update Income' : 'Save Income'}
+        </Text>
       </TouchableOpacity>
 
-      {saved !== null && (
-        <View style={incomeStyles.card}>
-          <Text style={incomeStyles.cardLabel}>Monthly Take-Home</Text>
-          <Text style={[incomeStyles.cardValue, { color: primaryColor }]}>${saved.toLocaleString()}</Text>
-        </View>
+      {monthlyIncome !== null && (
+        <>
+          {/* Summary row */}
+          <View style={incomeStyles.summaryRow}>
+            <View style={incomeStyles.summaryItem}>
+              <Text style={incomeStyles.summaryLabel}>Income</Text>
+              <Text style={[incomeStyles.summaryValue, { color: '#10B981' }]}>${monthlyIncome.toLocaleString()}</Text>
+            </View>
+            <View style={incomeStyles.summaryDivider} />
+            <View style={incomeStyles.summaryItem}>
+              <Text style={incomeStyles.summaryLabel}>Budgeted</Text>
+              <Text style={[incomeStyles.summaryValue, { color: primaryColor }]}>${totalBudgeted.toLocaleString()}</Text>
+            </View>
+            <View style={incomeStyles.summaryDivider} />
+            <View style={incomeStyles.summaryItem}>
+              <Text style={incomeStyles.summaryLabel}>Free</Text>
+              <Text style={[incomeStyles.summaryValue, { color: unallocated! < 0 ? '#EF4444' : '#1F2937' }]}>
+                {unallocated! < 0 ? `-$${Math.abs(unallocated!).toLocaleString()}` : `$${unallocated!.toLocaleString()}`}
+              </Text>
+            </View>
+          </View>
+
+          {/* Budget health bar */}
+          <View style={incomeStyles.healthCard}>
+            <View style={incomeStyles.healthHeader}>
+              <Text style={incomeStyles.healthTitle}>Budget Allocation</Text>
+              <Text style={incomeStyles.healthPct}>
+                {Math.min(Math.round((totalBudgeted / monthlyIncome) * 100), 100)}% allocated
+              </Text>
+            </View>
+            <View style={incomeStyles.healthBar}>
+              <View style={[
+                incomeStyles.healthFill,
+                {
+                  width: `${Math.min((totalBudgeted / monthlyIncome) * 100, 100)}%`,
+                  backgroundColor: totalBudgeted > monthlyIncome ? '#EF4444' : primaryColor,
+                },
+              ]} />
+            </View>
+          </View>
+
+          {/* Per-budget breakdown */}
+          <View style={incomeStyles.breakdownCard}>
+            <Text style={incomeStyles.breakdownTitle}>Budget Breakdown</Text>
+            {budgets.map((b) => {
+              const color = categoryColors[b.category] ?? DEFAULT_CATEGORY_COLORS[b.category] ?? '#9CA3AF';
+              const pct = Math.round((b.amount / monthlyIncome) * 100);
+              return (
+                <View key={b.id} style={incomeStyles.breakdownRow}>
+                  <Text style={incomeStyles.breakdownEmoji}>{CATEGORY_EMOJIS[b.category]}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={incomeStyles.breakdownLabelRow}>
+                      <Text style={incomeStyles.breakdownName}>{b.name}</Text>
+                      <Text style={[incomeStyles.breakdownPct, { color }]}>{pct}%</Text>
+                    </View>
+                    <View style={incomeStyles.miniBarBg}>
+                      <View style={[incomeStyles.miniBarFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: color }]} />
+                    </View>
+                  </View>
+                  <Text style={incomeStyles.breakdownAmt}>${b.amount.toLocaleString()}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </>
       )}
     </View>
   );
@@ -277,6 +346,7 @@ export default function BudgetListScreen() {
   const [budgets, setBudgets] = useState<Budget[]>(INITIAL_BUDGETS);
   const [activeTab, setActiveTab] = useState<TabKey>('budgets');
   const [showForm, setShowForm] = useState(false);
+  const [monthlyIncome, setMonthlyIncome] = useState<number | null>(null);
 
   const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);
   const totalSpent  = budgets.reduce((s, b) => s + b.spent, 0);
@@ -334,7 +404,13 @@ export default function BudgetListScreen() {
               )}
             </View>
           ) : (
-            <IncomeTab primaryColor={primaryColor} />
+            <IncomeTab
+              primaryColor={primaryColor}
+              categoryColors={categoryColors}
+              budgets={budgets}
+              monthlyIncome={monthlyIncome}
+              onSaveIncome={setMonthlyIncome}
+            />
           )}
 
         </ScrollView>
@@ -440,21 +516,51 @@ const formStyles = StyleSheet.create({
 const incomeStyles = StyleSheet.create({
   wrap: { padding: 16 },
   heading: { fontSize: 16, fontWeight: '800', color: '#1F2937', marginBottom: 4 },
-  sub: { fontSize: 13, color: '#9CA3AF', marginBottom: 20 },
+  sub: { fontSize: 13, color: '#9CA3AF', marginBottom: 16 },
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14,
-    borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 14,
+    borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1,
   },
   dollar: { fontSize: 20, color: '#9CA3AF', marginRight: 6 },
   input: { flex: 1, fontSize: 20, color: '#1F2937', paddingVertical: 12 },
-  btn: { borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 20 },
+  btn: {
+    borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 20,
+    shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  card: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20, alignItems: 'center',
+
+  summaryRow: {
+    flexDirection: 'row', backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  cardLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardValue: { fontSize: 32, fontWeight: '800', marginTop: 4 },
+  summaryItem: { flex: 1, alignItems: 'center' },
+  summaryLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 4 },
+  summaryDivider: { width: 1, backgroundColor: '#F3F4F6', marginVertical: 4 },
+
+  healthCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  healthHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  healthTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  healthPct: { fontSize: 13, color: '#9CA3AF', fontWeight: '600' },
+  healthBar: { height: 10, backgroundColor: '#E5E7EB', borderRadius: 5, overflow: 'hidden' },
+  healthFill: { height: '100%', borderRadius: 5 },
+
+  breakdownCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  breakdownTitle: { fontSize: 14, fontWeight: '800', color: '#1F2937', marginBottom: 14 },
+  breakdownRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  breakdownEmoji: { fontSize: 18, width: 24 },
+  breakdownLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  breakdownName: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  breakdownPct: { fontSize: 12, fontWeight: '700' },
+  miniBarBg: { height: 5, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
+  miniBarFill: { height: '100%', borderRadius: 3 },
+  breakdownAmt: { fontSize: 13, fontWeight: '700', color: '#1F2937', width: 56, textAlign: 'right' },
 });
