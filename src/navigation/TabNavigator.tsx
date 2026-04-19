@@ -9,6 +9,7 @@ import AddBudgetScreen from '../screens/free/AddBudgetScreen';
 import CalendarScreen from '../screens/premium/CalendarScreen';
 import SwipeScreen from '../screens/premium/SwipeScreen';
 import CustomizeScreen from '../screens/premium/CustomizeScreen';
+import BankConnectionScreen from '../screens/BankConnectionScreen';
 import ProfileScreen from '../screens/free/ProfileScreen';
 import { useTheme } from '../store/ThemeContext';
 
@@ -95,6 +96,18 @@ export default function TabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <View>
               <Ionicons name="calendar-outline" size={size} color={color} />
+              <LiteBadge />
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Bank"
+        component={BankConnectionScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <Ionicons name="link-outline" size={size} color={color} />
               <LiteBadge />
             </View>
           ),

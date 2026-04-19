@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SubscriptionProvider } from './src/store/SubscriptionContext';
 import { CalendarProvider } from './src/store/CalendarContext';
 import { ThemeProvider } from './src/store/ThemeContext';
+import { BankProvider } from './src/store/BankContext';
 import TabNavigator from './src/navigation/TabNavigator';
 
 export default function App() {
@@ -10,10 +11,12 @@ export default function App() {
     <ThemeProvider>
       <SubscriptionProvider>
         <CalendarProvider>
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <TabNavigator />
-          </NavigationContainer>
+          <BankProvider>
+            <NavigationContainer>
+              <StatusBar style="light" />
+              <TabNavigator />
+            </NavigationContainer>
+          </BankProvider>
         </CalendarProvider>
       </SubscriptionProvider>
     </ThemeProvider>
