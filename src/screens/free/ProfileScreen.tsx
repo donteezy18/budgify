@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../../store/SubscriptionContext';
 import { PLANS } from '../../types';
 import UpgradeScreen from '../UpgradeScreen';
+import { useTheme } from '../../store/ThemeContext';
 
 const MENU_ITEMS = [
   { icon: 'person-outline', label: 'Account Details' },
@@ -27,6 +28,7 @@ const TIER_COLORS: Record<string, string> = {
 
 export default function ProfileScreen() {
   const { tier } = useSubscription();
+  const { primaryColor } = useTheme();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const isUpgradable = tier !== 'pro_ultra';
   const plan = PLANS.find((p) => p.tier === tier)!;
@@ -46,7 +48,7 @@ export default function ProfileScreen() {
       <View style={styles.menu}>
         {MENU_ITEMS.map((item) => (
           <TouchableOpacity key={item.label} style={styles.menuItem}>
-            <Ionicons name={item.icon as any} size={22} color={TIER_COLORS[tier]} style={styles.menuIcon} />
+            <Ionicons name={item.icon as any} size={22} color={primaryColor} style={styles.menuIcon} />
             <Text style={styles.menuLabel}>{item.label}</Text>
             <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
           </TouchableOpacity>
@@ -56,10 +58,10 @@ export default function ProfileScreen() {
       {isUpgradable && (
         <TouchableOpacity style={styles.upgradeCard} onPress={() => setShowUpgrade(true)}>
           <Ionicons name="star" size={22} color="#F59E0B" />
-          <Text style={styles.upgradeText}>
+          <Text style={[styles.upgradeText, { color: primaryColor }]}>
             {tier === 'free' ? 'Upgrade to Pro Lite — $4.99/mo' : 'Upgrade to Pro Ultra — $9.99/mo'}
           </Text>
-          <Ionicons name="arrow-forward" size={18} color="#4F46E5" />
+          <Ionicons name="arrow-forward" size={18} color={primaryColor} />
         </TouchableOpacity>
       )}
 
@@ -107,5 +109,5 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16,
     borderWidth: 1, borderColor: '#FDE68A',
   },
-  upgradeText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#4F46E5', marginLeft: 10 },
+  upgradeText: { flex: 1, fontSize: 15, fontWeight: '700', marginLeft: 10 },
 });

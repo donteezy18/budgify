@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PremiumGate from '../../components/PremiumGate';
 import { Transaction, BudgetCategory } from '../../types';
+import { useTheme } from '../../store/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
@@ -114,6 +115,7 @@ function SwipeCard({ transaction, onSwipe }: {
 }
 
 function SwipeContent() {
+  const { primaryColor } = useTheme();
   const [transactions, setTransactions] = useState(mockUncategorized);
   const [done, setDone] = useState(false);
 
@@ -135,7 +137,7 @@ function SwipeContent() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: primaryColor }]}>
         <Text style={styles.headerTitle}>Swipe to Sort</Text>
         <Text style={styles.headerSub}>{transactions.length} transactions to categorize</Text>
       </View>
@@ -163,7 +165,6 @@ export default function SwipeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6FA' },
   header: {
-    backgroundColor: '#4F46E5',
     paddingTop: 60,
     paddingBottom: 24,
     paddingHorizontal: 20,

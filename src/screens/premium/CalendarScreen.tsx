@@ -505,12 +505,11 @@ const gridStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6FA' },
   header: {
-    backgroundColor: '#4F46E5',
     paddingTop: 60, paddingBottom: 24, paddingHorizontal: 20,
     borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
   },
   headerTitle: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  headerSub: { color: '#C7D2FE', fontSize: 14, marginTop: 2 },
+  headerSub: { color: 'rgba(255,255,255,0.75)', fontSize: 14, marginTop: 2 },
   monthNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14,
